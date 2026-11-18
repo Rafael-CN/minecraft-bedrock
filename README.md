@@ -69,4 +69,4 @@ minecraft-bedrock/
    .\scripts\Restaurar.ps1
    ```
 
-Documentação operacional detalhada sobre Add-Ons, volumes WSL2 e proteção contra corrupção de LevelDB está disponível em [`LEIAME.md`](./LEIAME.md).
+Documentação operacional detalhada sobre Add-Ons, volumes WSL2 e proteção contra corrupção de LevelDB está disponível em [`docs/operacao.md`](./docs/operacao.md).
