@@ -500,7 +500,7 @@ try {
         Write-Host ''
         Write-Warn2 "packs com script detectados: $(($scriptPacks | Select-Object -Unique) -join ', ')"
         Write-Host "         esses quase sempre exigem o experimento 'Beta APIs' LIGADO no mundo." -ForegroundColor DarkGray
-        Write-Host "         experimento nao se liga por arquivo - veja 'Experimentos' no LEIAME.md." -ForegroundColor DarkGray
+        Write-Host "         experimento nao se liga por arquivo - veja 'Experimentos' em docs/operacao.md." -ForegroundColor DarkGray
     }
 
     Write-Host ''
