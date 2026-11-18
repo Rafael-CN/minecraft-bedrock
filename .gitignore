@@ -1,0 +1,11 @@
+.env
+data/
+backups/
+addons/*
+!addons/LEIA-ME.txt
+_data-antiga-pode-apagar/
+logs/
+install-log.txt
+__pycache__/
+*.tar
+*.tar.gz

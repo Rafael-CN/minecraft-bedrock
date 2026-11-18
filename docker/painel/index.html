@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aether — Mesa do Mestre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Oxanium:wght@500;600;700;800&family=Barlow:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="painel.css">
+</head>
+<body>
+
+<!-- O modo de jogo (tecla F) precisa estar decidido antes do CSS de
+     abertura desenhar #coluna-esq/#coluna-dir: só assim elas nascem já
+     recolhidas, sem animar entrada para sumir 340ms depois. Por isso
+     este script mora aqui, antes do resto do corpo — não lá embaixo,
+     junto do painel.js, onde já seria tarde. -->
+<script>
+  try { if (localStorage.getItem("aether.modoJogo") === "1") document.body.classList.add("modo-jogo"); }
+  catch (e) { /* sem localStorage (aba privada, etc.), começa no modo normal mesmo */ }
+</script>
+
+<!-- ═══ O CASCO — a grade de 3 colunas × 3 faixas ═══
+     Tudo aqui dentro se ancora numa célula da grade, nunca num pixel da
+     janela. O que segue o cursor ou abre por cima de tudo (ficha, HUD,
+     menus, popovers, tapumes, brindes) fica fora, depois do casco. -->
+<div id="casco">
+
+<!-- CAMADA 1 — O PALCO -->
+<div id="palco">
+  <!-- credentialless: o mapa e servido de outra porta do mesmo localhost,
+       e o navegador manda para la os cookies de tudo que roda em
+       localhost - porta nao separa cookie. Isso ja derrubou o mapa com
+       400 "Request Header Or Cookie Too Large". O mapa nao le cookie
+       nenhum, entao carrega sem eles. -->
+  <iframe id="mapa" title="Mapa do mundo" referrerpolicy="no-referrer" credentialless></iframe>
+  <div id="mapa-ausente">
+    <div class="disp mapa-ausente-titulo">O mapa ainda não respondeu</div>
+    <div class="mapa-ausente-texto">
+      O container do mapa pode estar desligado ou ainda desenhando o mundo pela primeira vez.
+      O resto da mesa funciona normalmente.
+    </div>
+    <button class="btn chanfro-p" onclick="recarregarMapa()">Tentar de novo</button>
+  </div>
+</div>
+<div id="veu"></div>
+<div id="grao"></div>
+
+<!-- CAMADA 2 — AÇÃO -->
+<!-- CPU, memória e o relógio saíram daqui: ninguém olha telemetria enquanto
+     joga. Os valores continuam em S.status para o Servidor mostrar. -->
+<header id="topo">
+  <div class="superficie pilula">
+    <div class="marca-bloco chanfro-p"></div>
+    <span class="disp marca-nome">AETHER</span>
+    <span class="tracinho"></span>
+    <span class="pulso" id="pulso"></span>
+    <span class="mono" id="estado-curto">Conectando…</span>
+  </div>
+
+  <!-- Discreto de propósito: só o ícone, sem rótulo — não compete com
+       "Servidor" ao lado. Estado e atalho (tecla F) ficam no title. -->
+  <button class="superficie pilula pilula-direita botao-modo-jogo" id="botao-modo-jogo"
+          onclick="alternarModoJogo()" title="Modo de jogo — tecla F" aria-pressed="false">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 1 2-2v-3"/></svg>
+  </button>
+
+  <button class="superficie pilula botao-abrir-servidor" onclick="abrirServidor()">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><rect x="3" y="4" width="18" height="16"/><path d="M3 9h18M7 14h4"/></svg>
+    <span class="disp pilula-rotulo">Servidor</span>
+  </button>
+</header>
+
+<aside id="coluna-esq">
+  <!-- O jogador é o herói da coluna: quase todo comando é sobre ele.
+       Céu e tempo vira apoio, compacto, logo abaixo — e as regras do
+       mundo saíram para o Servidor, que é onde configuração mora. -->
+  <div class="rot rot-topo">No mundo agora</div>
+  <div id="lista-jogadores"></div>
+
+  <div class="rot rot-bloco">Céu e tempo</div>
+  <div class="vidro chanfro bloco-controle">
+    <div>
+      <div class="rot rot-mb12">Clima</div>
+      <div class="segmentado" id="clima" role="group" aria-label="Clima do mundo"></div>
+    </div>
+    <div>
+      <div class="rot rot-mb12">Hora do dia</div>
+      <div class="segmentado" id="horas" role="group" aria-label="Hora do dia"></div>
+      <div class="chave-linha"><span>Agora</span><span class="mono" id="hora-tique">—</span></div>
+    </div>
+  </div>
+</aside>
+
+<aside id="coluna-dir">
+  <div class="linha-cabeca-coluna">
+    <span class="rot">Acontecendo</span>
+    <button id="botao-mudo" class="botao-mudo" title="Ligar ou desligar o som" aria-pressed="false"></button>
+  </div>
+  <!-- Dois tons de voz na mesma fita — o que você mandou, o que o mundo
+       fez sozinho — pedem um jeito de olhar só um dos dois. -->
+  <div class="segmentado segmentado--texto" id="filtro-fita" role="group" aria-label="Filtrar a fita"></div>
+  <div class="vidro chanfro" id="lista-eventos"></div>
+</aside>
+
+<div id="area-linha">
+  <div id="coluna-comando">
+    <div id="sugestoes" class="superficie" hidden></div>
+
+    <div id="barra" class="superficie">
+      <span class="mono barra-marca">/</span>
+      <input id="entrada" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Digite um comando, ou clique num jogador">
+
+      <button class="chip chanfro-p verde" onclick="ciclarAlvo()" title="Quem recebe o comando — clique para passar ao próximo">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" stroke-linecap="square"/></svg>
+        <span class="empilha">
+          <span class="rotulo">alvo</span>
+          <span class="valor" id="chip-alvo">@a</span>
+        </span>
+      </button>
+
+      <button class="chip chanfro-p ambar" id="botao-vezes" onclick="abrirVezes(event)" title="Quantas vezes mandar o mesmo comando">
+        <span class="empilha">
+          <span class="rotulo">repetir</span>
+          <span class="valor"><span id="chip-vezes">1</span>×</span>
+        </span>
+      </button>
+
+      <button class="botao-mandar chanfro-p disp" id="botao-mandar" onclick="mandarLinha()">MANDAR</button>
+    </div>
+
+    <div id="rodape-linha">
+      <span class="rot rot-fim">Recentes</span>
+      <span id="historico-pilulas"></span>
+    </div>
+  </div>
+
+  <!-- O que sobrou de valioso da bancada: o item se formando enquanto
+       você escreve um "give ... with", do jeito que o tooltip do jogo
+       mostra. Some quando a linha não é isso. -->
+  <div id="previa-item" class="superficie" hidden></div>
+</div>
+
+<!-- O seletor de camadas e a barra de ferramentas do mapa: mesma
+     superfície densa, orientações diferentes. -->
+<div id="camadas-mapa" class="superficie superficie--densa" role="group" aria-label="Camada do mapa" hidden></div>
+<div id="ferramentas-mapa" class="superficie superficie--densa"></div>
+
+<!-- Só aparece no modo de jogo: os 3 acontecimentos mais recentes, um
+     clone que desenharFita() mantém atualizado — ver painel.js. -->
+<div id="fita-minima" class="vidro chanfro" hidden></div>
+
+</div><!-- /#casco -->
+
+<!-- Flutuam livres: seguem o cursor ou abrem por cima de tudo — não têm
+     célula de grade porque não são parte do casco. -->
+<div id="ficha" class="superficie" hidden></div>
+<div id="pop-vezes" class="superficie superficie--densa" hidden></div>
+<div id="hud-mapa" class="superficie superficie--densa"></div>
+<div id="menu-mapa" class="superficie superficie--densa" hidden></div>
+
+<!-- ═══ CAMADA 3 — MANUTENÇÃO ═══
+     Cinco abas, uma pergunta cada: como ele está, o que tem dentro do
+     mundo, o que está instalado, o que dá para restaurar, o que ele andou
+     dizendo. A aba escolhida é lembrada entre visitas (localStorage), e
+     Esc fecha o tapume de qualquer uma delas — isso continua no teclado
+     global, não aqui dentro. -->
+<div class="tapume" id="tapume-servidor" hidden>
+  <div class="folha chanfro luz2">
+    <div class="cabeca">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--grama)" stroke-width="2" stroke-linecap="square"><rect x="3" y="4" width="18" height="16"/><path d="M3 9h18M7 14h4"/></svg>
+      <span class="disp tapume-titulo">SERVIDOR</span>
+      <span class="selo chanfro-p verde" id="selo-servidor"><span class="pulso"></span><span class="mono">—</span></span>
+      <span class="mono tapume-dica">Esc para voltar ao mapa</span>
+    </div>
+
+    <div class="abas-servidor-barra">
+      <div class="segmentado segmentado--texto abas-servidor" id="abas-servidor" role="tablist" aria-label="Seções do servidor"></div>
+    </div>
+
+    <div class="paineis-servidor">
+
+      <!-- SAÚDE — a primeira linha é saúde, não telemetria. Tudo aqui é
+           montado pelo JS (desenharSaude), inclusive Ligar/Reiniciar/
+           Desligar, porque o peso de cada botão depende de quem está
+           online agora. -->
+      <section class="painel-aba" data-aba="saude" id="aba-saude"></section>
+
+      <!-- MUNDO — regras (migraram da coluna esquerda da mesa), o mapa
+           redesenhado sob demanda, e quem já passou por aqui. -->
+      <section class="painel-aba" data-aba="mundo" id="aba-mundo" hidden>
+        <div class="bloco-aba">
+          <div class="rot rot-mb12">Regras do mundo</div>
+          <div id="regras-mundo"></div>
+        </div>
+        <div class="bloco-aba">
+          <div class="linha-cabeca-bloco">
+            <div class="rot">O mapa</div>
+            <span class="mono contador-legenda" id="mapa-idade">—</span>
+            <button class="btn verde chanfro-p botao-salvar" id="botao-render-mapa"
+                    onclick="iniciarRenderMapa(this)">Redesenhar o mapa agora</button>
+          </div>
+          <div id="progresso-mapa" class="progresso-mapa"></div>
+        </div>
+        <div class="bloco-aba bloco-aba--cresce">
+          <div class="rot rot-mb12">Quem já passou pelo mundo</div>
+          <div id="lista-visitantes" class="lista-visitantes"></div>
+        </div>
+      </section>
+
+      <!-- PACOTES — o que está ligado no mundo e o que dá para instalar. -->
+      <section class="painel-aba" data-aba="pacotes" id="aba-pacotes" hidden>
+        <div class="bloco-aba">
+          <div class="linha-cabeca-bloco">
+            <div class="rot">O que está ligado no mundo</div>
+            <span class="mono contador-legenda" id="conta-addons">—</span>
+          </div>
+          <div id="lista-addons"></div>
+        </div>
+        <div class="bloco-aba bloco-aba--cresce">
+          <div class="rot rot-mb12">Pacotes prontos para instalar</div>
+          <div id="lista-disponiveis"></div>
+        </div>
+      </section>
+
+      <!-- BACKUPS — volta no tempo. O nome cru do arquivo só aparece no
+           hover (title): a segunda linha mostra o que importa, tamanho e
+           há quanto tempo. -->
+      <section class="painel-aba" data-aba="backups" id="aba-backups" hidden>
+        <div class="linha-cabeca-bloco">
+          <div class="rot">Volta no tempo</div>
+          <span class="mono contador-legenda" id="conta-backups">—</span>
+          <span class="selo chanfro-p tocha" id="aviso-backup-atrasado" hidden>Atrasado</span>
+          <button class="btn verde chanfro-p botao-salvar" onclick="salvarAgora(this)">Salvar agora</button>
+        </div>
+        <div id="lista-backups"></div>
+      </section>
+
+      <!-- LOG — o que o servidor andou dizendo, com filtro por tipo,
+           busca, e atualização sozinha enquanto a aba estiver aberta. -->
+      <section class="painel-aba" data-aba="log" id="aba-log" hidden>
+        <div class="log-barra">
+          <div class="segmentado segmentado--texto" id="filtro-log" role="group" aria-label="Filtrar o log"></div>
+          <input id="busca-log" class="log-busca mono" type="text" placeholder="Buscar no log…" autocomplete="off">
+        </div>
+        <div id="lista-log" class="lista-log mono"></div>
+      </section>
+
+    </div>
+    <div class="rodape-tapume">
+      <span class="mono" id="rodape-versao">—</span>
+      <span class="mono rodape-aviso">Nada aqui interrompe quem está jogando, menos desligar e instalar</span>
+    </div>
+  </div>
+</div>
+
+<div id="brindes"></div>
+
+<script src="painel.js"></script>
+</body>
+</html>

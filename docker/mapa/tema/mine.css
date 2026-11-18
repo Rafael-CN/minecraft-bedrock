@@ -1,0 +1,328 @@
+/* ------------------------------------------------------------------
+   Tema Minecraft para o mapa do uNmINeD.
+
+   Só CSS e um overlay estático. O mapa em si (OpenLayers) fica intacto:
+   este arquivo veste os controles e a moldura, nunca a lógica.
+   ------------------------------------------------------------------ */
+
+:root {
+  --mc-fonte: "Pixelify Sans", "Segoe UI", sans-serif;
+
+  /* botão de menu do Minecraft: cinza com bisel */
+  --mc-btn:        #6e6e6e;
+  --mc-btn-luz:    #a8a8a8;
+  --mc-btn-sombra: #363636;
+  --mc-btn-hover:  #8a8a8a;
+
+  /* painel de inventário */
+  --mc-painel:        #c6c6c6;
+  --mc-painel-luz:    #ffffff;
+  --mc-painel-sombra: #555555;
+  --mc-texto-painel:  #3f3f3f;
+
+  /* cores do chat */
+  --mc-amarelo: #ffff55;
+  --mc-verde:   #55ff55;
+  --mc-aqua:    #55ffff;
+  --mc-cinza:   #aaaaaa;
+
+  /* A paleta do painel (Mesa do Mestre), só para o que este arquivo
+     empresta dela: o seletor de camadas. O resto do mapa continua no
+     visual "menu de inventário" que já tinha - misturar as duas
+     identidades em tudo ficaria pior que as duas separadas. */
+  --tema-fundo:  #17140f;
+  --tema-linha:  #3a3226;
+  --tema-verde:  #63c95e;
+  --tema-ambar:  #d99a45;
+  --tema-texto:  #e7e2d8;
+}
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: #1a1611;
+  font-family: var(--mc-fonte);
+  image-rendering: pixelated;
+}
+
+/* Fundo de terra escurecido (a textura é gerada por mine.js num canvas
+   16x16 e aplicada aqui como background). Só aparece fora dos tiles. */
+body.mc-dirt {
+  background-color: #1a1611;
+  background-image: var(--mc-dirt-url);
+  background-size: 64px 64px;
+}
+
+/* ------------------------------------------------ controles do OpenLayers */
+
+.ol-control {
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+
+.ol-zoom {
+  top: auto !important;
+  left: auto !important;
+  right: 18px !important;
+  bottom: 56px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ol-zoom button,
+.ol-rotate button,
+.ol-attribution button {
+  width: 42px !important;
+  height: 42px !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  cursor: pointer;
+  font-family: var(--mc-fonte) !important;
+  font-size: 28px !important;
+  font-weight: 700;
+  line-height: 1 !important;
+  color: #fff !important;
+  text-shadow: 2px 2px 0 #3f3f3f;
+  background: var(--mc-btn) !important;
+  box-shadow:
+    inset 3px 3px 0 var(--mc-btn-luz),
+    inset -3px -3px 0 var(--mc-btn-sombra),
+    0 0 0 3px #000;
+  transition: none !important;
+}
+.ol-zoom button:hover,
+.ol-rotate button:hover,
+.ol-attribution button:hover {
+  background: var(--mc-btn-hover) !important;
+  box-shadow:
+    inset 3px 3px 0 #fff,
+    inset -3px -3px 0 var(--mc-btn-sombra),
+    0 0 0 3px #000;
+}
+.ol-zoom button:active { transform: translate(2px, 2px); }
+.ol-zoom button:focus-visible { outline: 3px solid var(--mc-amarelo); outline-offset: 2px; }
+
+.ol-rotate { display: none !important; }
+
+.ol-attribution {
+  bottom: 12px !important;
+  right: 18px !important;
+  font-family: var(--mc-fonte);
+  font-size: 12px;
+}
+.ol-attribution ul {
+  color: var(--mc-cinza) !important;
+  text-shadow: 1px 1px 0 #000 !important;
+  font-family: var(--mc-fonte) !important;
+  padding: 0 4px !important;
+}
+.ol-attribution a { color: var(--mc-aqua) !important; }
+.ol-attribution button { width: 26px !important; height: 26px !important; font-size: 14px !important; }
+
+/* A barra de escala do uNmINeD mede em METROS - isto é um mundo de
+   blocos, e a barra do tema (.mc-escala, mais abaixo) já cobre o mesmo
+   papel em blocos. Duas escalas concorrentes, em unidades diferentes,
+   não ajudam ninguém: esta some sempre, embutida ou não.
+   A versão do uNmINeD em uso monta o controle no estilo "bar"
+   (.ol-scale-bar), não no estilo "line" (.ol-scale-line) - as duas
+   classes ficam aqui porque a lib pode trocar de estilo entre versões
+   e nenhuma delas deve voltar a aparecer. */
+.ol-scale-line, .ol-scale-bar { display: none !important; }
+
+/* coordenadas do mouse, se o uNmINeD exibir */
+.ol-mouse-position,
+#unmined-coordinates, .coords {
+  font-family: var(--mc-fonte) !important;
+  color: var(--mc-amarelo) !important;
+  text-shadow: 2px 2px 0 #3f3f3f;
+  font-size: 14px !important;
+}
+
+/* grade de coordenadas do uNmINeD - suaviza */
+.unmined-grid-label, .gridLabel {
+  font-family: var(--mc-fonte) !important;
+  color: var(--mc-cinza) !important;
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* ---------------------------------------------------------- overlay */
+
+.mc-placa {
+  position: fixed;
+  top: 16px;
+  left: 18px;
+  z-index: 50;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 36px));
+}
+
+.mc-titulo {
+  display: inline-block;
+  pointer-events: auto;
+  padding: 10px 16px 12px;
+  background: var(--mc-painel);
+  color: var(--mc-texto-painel);
+  box-shadow:
+    inset 3px 3px 0 var(--mc-painel-luz),
+    inset -3px -3px 0 var(--mc-painel-sombra),
+    0 0 0 3px #000;
+}
+.mc-titulo h1 {
+  margin: 0;
+  font-family: var(--mc-fonte);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: .5px;
+}
+.mc-titulo small {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #5a5a5a;
+}
+
+/* botão de voltar ao painel */
+.mc-voltar {
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 50;
+  padding: 10px 16px;
+  font-family: var(--mc-fonte);
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  text-decoration: none;
+  text-shadow: 2px 2px 0 #3f3f3f;
+  background: var(--mc-btn);
+  box-shadow:
+    inset 3px 3px 0 var(--mc-btn-luz),
+    inset -3px -3px 0 var(--mc-btn-sombra),
+    0 0 0 3px #000;
+}
+.mc-voltar:hover {
+  background: var(--mc-btn-hover);
+  box-shadow: inset 3px 3px 0 #fff, inset -3px -3px 0 var(--mc-btn-sombra), 0 0 0 3px #000;
+}
+.mc-voltar:focus-visible { outline: 3px solid var(--mc-amarelo); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .mc-titulo h1 { font-size: 17px; }
+  .mc-voltar { font-size: 13px; padding: 8px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ol-zoom button:active { transform: none; }
+}
+
+/* ── Modo embutido ──────────────────────────────────────────────────
+   O painel (porta 8080) usa este mapa como palco: ele ocupa a tela
+   inteira atras da interface da Mesa do Mestre. Aqui some tudo que e
+   moldura - a placa do tema, o botao de voltar, o seletor de camadas
+   (o painel tem o dele) e os controles do OpenLayers - porque a
+   interface de cima ja e a do painel. A barra de escala do uNmINeD
+   (.ol-scale-line ou .ol-scale-bar) já some sempre, embutida ou não -
+   regra lá em cima.
+
+   A excecao e .ol-mouse-position: ele continua no DOM, so invisivel,
+   porque e dele que sai a coordenada do mundo quando alguem clica no
+   chao. Escondido com display:none o texto ainda seria escrito, mas
+   opacity deixa isso obvio para quem ler este arquivo depois. */
+.mc-embutido .mc-placa,
+.mc-embutido .mc-voltar,
+.mc-embutido .mc-seletor,
+.mc-embutido .ol-zoom,
+.mc-embutido .ol-rotate,
+.mc-embutido .ol-attribution { display: none !important; }
+
+.mc-embutido .ol-mouse-position {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.mc-embutido, .mc-embutido body { background: #0c0b0a !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   BARRA DE ESCALA
+
+   Sem ela não dá para saber se aquele lago tem cinquenta blocos ou
+   quinhentos. O número é sempre redondo — 1, 2, 5, 10, 20, 50… —
+   porque uma barra de "137 blocos" não ajuda ninguém a estimar.
+   ═══════════════════════════════════════════════════════════════════ */
+.mc-escala {
+  position: fixed; left: 22px; bottom: 128px; z-index: 900;
+  display: flex; flex-direction: column; gap: 4px;
+  pointer-events: none; user-select: none;
+}
+.mc-escala-texto {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px; color: rgba(214, 209, 201, .9);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .9);
+  letter-spacing: .02em;
+}
+.mc-escala-barra {
+  height: 6px; min-width: 24px;
+  border: 1px solid rgba(240, 236, 230, .65);
+  border-top: 0;
+  transition: width .18s ease-out;
+}
+
+/* Embutido no painel a barra sobe: ali embaixo fica a linha de comando. */
+.mc-embutido .mc-escala { left: 20px; bottom: 150px; }
+
+/* Enquanto a régua está ligada o cursor diz o que o clique vai fazer. */
+.mc-medindo .ol-viewport { cursor: crosshair !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   SELETOR DE CAMADAS (página sozinha)
+
+   Só existe fora do painel - lá dentro o seletor é o do painel, e a
+   classe .mc-embutido já esconde este (regra lá em cima). Montado pelo
+   mine.js a partir de camadas.json; aqui só a forma, na paleta do
+   painel (verde/âmbar), não na do "menu de inventário" do resto do
+   mapa - é o único pedaço desta página que fala a língua da Mesa do
+   Mestre, de propósito: é o que substitui o botão que existe lá.
+   ═══════════════════════════════════════════════════════════════════ */
+.mc-seletor {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 55;
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: var(--tema-fundo);
+  border: 1px solid var(--tema-linha);
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+  font-family: "Barlow", var(--mc-fonte);
+}
+.mc-seletor-item {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 7px 14px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: var(--tema-texto);
+  background: transparent;
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+  transition: background .12s ease-out, color .12s ease-out;
+}
+.mc-seletor-item:hover { background: rgba(217, 154, 69, .18); color: var(--tema-ambar); }
+.mc-seletor-item.ativo { background: var(--tema-verde); color: #16210f; cursor: default; }
+.mc-seletor-item:focus-visible { outline: 2px solid var(--tema-ambar); outline-offset: -2px; }
+
+@media (max-width: 640px) {
+  .mc-seletor { top: auto; bottom: 16px; max-width: calc(100vw - 32px); overflow-x: auto; }
+  .mc-seletor-item { padding: 6px 10px; font-size: 11.5px; }
+}

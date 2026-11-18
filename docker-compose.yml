@@ -1,0 +1,254 @@
+services:
+  bedrock:
+    image: itzg/minecraft-bedrock-server:${IMAGE_TAG:-latest}
+    container_name: mc-bedrock
+    restart: unless-stopped
+
+    # O autoheal so mexe em container com esta etiqueta.
+    labels:
+      autoheal: "true"
+
+    # stdin/tty abertos: e o que permite "docker attach mc-bedrock"
+    # para digitar comandos direto no console do servidor.
+    stdin_open: true
+    tty: true
+
+    # O Bedrock precisa de tempo para gravar o mundo antes de morrer.
+    # Sem isso o Docker manda SIGKILL em 10s e o banco do mundo pode
+    # corromper - foi exatamente o que quase aconteceu em 01/09/2026.
+    stop_grace_period: 120s
+
+    # send-command precisa varrer /proc para achar o processo do servidor.
+    # Com o mundo no WSL2 o servidor passa a rodar como uid 1000 (o dono de
+    # /data) e o kernel do WSL bloqueia a leitura de /proc/<pid>/exe entre
+    # processos que nao sao parentes. SYS_PTRACE devolve essa permissao -
+    # sem ela o backup a quente nao consegue mandar 'save hold'.
+    cap_add:
+      - SYS_PTRACE
+
+    # O PC nao e so do servidor. Sem teto, um mundo pesado engole a
+    # maquina inteira. 4 de 12 threads e 6 de 16 GB deixam folga.
+    cpus: ${CPUS:-4}
+    mem_limit: ${MEM_LIMIT:-6g}
+
+    ports:
+      - "${HOST_PORT:-19132}:19132/udp"
+      - "${HOST_PORT_V6:-19133}:19133/udp"
+
+    environment:
+      EULA: "TRUE"
+      VERSION: "${VERSION:-LATEST}"
+
+      SERVER_NAME: "${SERVER_NAME:-Servidor do Rafael}"
+      LEVEL_SEED: "${LEVEL_SEED:-}"
+
+      GAMEMODE: "${GAMEMODE:-survival}"
+      DIFFICULTY: "${DIFFICULTY:-normal}"
+      ALLOW_CHEATS: "${ALLOW_CHEATS:-true}"
+      MAX_PLAYERS: "${MAX_PLAYERS:-10}"
+
+      ONLINE_MODE: "${ONLINE_MODE:-true}"
+      ALLOW_LIST: "${ALLOW_LIST:-false}"
+      ALLOW_LIST_USERS: "${ALLOW_LIST_USERS:-}"
+
+      OPS: "${OPS:-}"
+      DEFAULT_PLAYER_PERMISSION_LEVEL: "${DEFAULT_PLAYER_PERMISSION_LEVEL:-member}"
+
+      VIEW_DISTANCE: "${VIEW_DISTANCE:-14}"
+      TICK_DISTANCE: "${TICK_DISTANCE:-4}"
+
+      CONTENT_LOG_FILE_ENABLED: "true"
+      CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: "true"
+
+      TZ: "America/Sao_Paulo"
+
+    volumes:
+      # O mundo vive no sistema de arquivos do WSL2, nao numa pasta do
+      # Windows. Medido em 01/09/2026 com 2.000 arquivos pequenos:
+      #   pasta do Windows  4898 ms escrita / 3650 ms leitura
+      #   WSL2 Ubuntu         61 ms escrita /   53 ms leitura
+      # Continua acessivel pelo Explorer em:
+      #   \\wsl.localhost\Ubuntu\home\rafael\minecraft-bedrock\data
+      - "${DATA_PATH:-//wsl.localhost/Ubuntu/home/rafael/minecraft-bedrock/data}:/data"
+
+    healthcheck:
+      # 127.0.0.1 e nao "localhost": localhost resolve para ::1, e o bind
+      # IPv6 do Bedrock fica na 19133, nao na 19132.
+      # Alem do ping, confere se o mundo esta REALMENTE montado. Em
+      # 02/09/2026 o bind do WSL2 ficou orfao, o servidor gerou um mundo
+      # novo em branco e o ping continuou respondendo alegremente - o
+      # healthcheck antigo nao via problema nenhum.
+      # level-name vem do server.properties (fonte da verdade desde o C1);
+      # LEVEL_NAME nao existe mais como env aqui - usar a env vazia fazia o
+      # teste falhar sempre e deixava o servidor "unhealthy" de pe.
+      test: ["CMD-SHELL", "L=$$(grep -E '^level-name=' /data/server.properties | cut -d= -f2-); test -n \"$$L\" && test -f \"/data/worlds/$$L/world_behavior_packs.json\" && mc-monitor status-bedrock --host 127.0.0.1"]
+      start_period: 300s
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ------------------------------------------------------------------
+  #  Mundo de testes - so sobe quando voce pede
+  #
+  #      .\scripts\mc.ps1 teste up
+  #
+  #  Serve para instalar addon novo e ver se quebra ANTES de por no mundo
+  #  onde estao as construcoes. Mundo, porta e pasta separados: o que
+  #  acontecer aqui nao encosta no Aether.
+  # ------------------------------------------------------------------
+  teste:
+    image: itzg/minecraft-bedrock-server:${IMAGE_TAG:-latest}
+    container_name: mc-bedrock-teste
+    profiles: ["teste"]
+    restart: "no"
+    stdin_open: true
+    tty: true
+    stop_grace_period: 60s
+    cap_add:
+      - SYS_PTRACE
+    cpus: ${TESTE_CPUS:-2}
+    mem_limit: ${TESTE_MEM:-3g}
+    ports:
+      - "${TESTE_PORT:-19134}:19132/udp"
+    environment:
+      EULA: "TRUE"
+      VERSION: "${VERSION:-LATEST}"
+      SERVER_NAME: "TESTES - nao e o mundo bom"
+      # Sem isso a bancada sobe com allow list ligada e lista vazia,
+      # o que tranca todo mundo do lado de fora.
+      ALLOW_LIST: "false"
+      GAMEMODE: "creative"
+      DIFFICULTY: "peaceful"
+      ALLOW_CHEATS: "true"
+      MAX_PLAYERS: "4"
+      ONLINE_MODE: "${ONLINE_MODE:-true}"
+      VIEW_DISTANCE: "10"
+      TICK_DISTANCE: "4"
+      CONTENT_LOG_FILE_ENABLED: "true"
+      CONTENT_LOG_CONSOLE_OUTPUT_ENABLED: "true"
+      TZ: "America/Sao_Paulo"
+    volumes:
+      - "${TESTE_DATA_PATH:-/home/rafael/minecraft-bedrock/data-teste}:/data"
+
+  # ------------------------------------------------------------------
+  #  Backup automatico - substituiu a tarefa agendada do Windows
+  #
+  #  Roda todo dia as 05:00 (BACKUP_CRON), a quente, sem desconectar
+  #  ninguem, e apaga os mais antigos sozinho. Precisa do socket do
+  #  docker porque manda "save hold" no servidor via docker exec.
+  # ------------------------------------------------------------------
+  backup:
+    build: ./docker/backup
+    image: mc-backup-local
+    container_name: mc-backup
+    restart: unless-stopped
+    depends_on:
+      - bedrock
+    environment:
+      SERVER_CONTAINER: mc-bedrock
+      LEVEL_NAME: "${LEVEL_NAME:-Bedrock level}"
+      BACKUP_KEEP: "${BACKUP_KEEP:-7}"
+      BACKUP_CRON: "${BACKUP_CRON:-0 5 * * *}"
+      BACKUP_ON_START: "${BACKUP_ON_START:-false}"
+      GUARD_INTERVAL: "${GUARD_INTERVAL:-60}"
+      TZ: "America/Sao_Paulo"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # So leitura: o backup nunca deve poder escrever no mundo.
+      - "${DATA_PATH:-./data}:/data:ro"
+      - "${BACKUPS_PATH:-/home/rafael/minecraft-bedrock/backups}:/backups"
+
+  # ------------------------------------------------------------------
+  #  Vigia - substituiu a tarefa agendada do Windows
+  #
+  #  Reinicia sozinho qualquer container marcado com a etiqueta
+  #  autoheal que fique "unhealthy". O healthcheck do servidor testa a
+  #  porta do Bedrock, entao isso cobre tanto o container morrer quanto
+  #  o servidor travar de pe.
+  # ------------------------------------------------------------------
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: mc-autoheal
+    restart: unless-stopped
+    environment:
+      AUTOHEAL_CONTAINER_LABEL: autoheal
+      AUTOHEAL_INTERVAL: 60
+      AUTOHEAL_START_PERIOD: 420
+      AUTOHEAL_DEFAULT_STOP_TIMEOUT: 120
+      TZ: "America/Sao_Paulo"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ------------------------------------------------------------------
+  #  Painel de controle - http://localhost:8080
+  #
+  #  Publicado SO em 127.0.0.1 de proposito: nao tem senha, entao existe
+  #  apenas para quem ja esta nesta maquina. Nao mude para 0.0.0.0 sem
+  #  por autenticacao antes.
+  # ------------------------------------------------------------------
+  painel:
+    build: ./docker/painel
+    image: mc-painel-local
+    container_name: mc-painel
+    restart: unless-stopped
+    depends_on:
+      - bedrock
+    ports:
+      - "127.0.0.1:${PANEL_PORT:-8080}:8080"
+    environment:
+      SERVER_CONTAINER: mc-bedrock
+      BACKUP_CONTAINER: mc-backup
+      TEST_CONTAINER: mc-bedrock-teste
+      TZ: "America/Sao_Paulo"
+      # O painel desenha o mapa num iframe apontado para o container do
+      # mapa, que publica noutra porta do mesmo host. Sem esta variavel o
+      # navegador teria que chutar 8081 e quebraria se a porta mudasse.
+      MAP_PORT: "${MAP_PORT:-8081}"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${DATA_PATH:-./data}:/data:rw"
+      - "${TESTE_DATA_PATH:-/home/rafael/minecraft-bedrock/data-teste}:/data-teste:rw"
+      - "./addons:/addons:ro"
+      - "${BACKUPS_PATH:-/home/rafael/minecraft-bedrock/backups}:/backups:rw"
+
+  # ------------------------------------------------------------------
+  #  Mapa do mundo - http://localhost:8081
+  #
+  #  O renderizador roda de madrugada (MAP_CRON) e escreve numa pasta
+  #  que o nginx serve. Mundo montado como :ro - render nunca escreve.
+  # ------------------------------------------------------------------
+  mapa-render:
+    build: ./docker/mapa
+    image: mc-mapa-local
+    container_name: mc-mapa-render
+    restart: unless-stopped
+    environment:
+      LEVEL_NAME: "${LEVEL_NAME:-Bedrock level}"
+      MAP_CRON: "${MAP_CRON:-30 5 * * *}"
+      MAP_ON_START: "${MAP_ON_START:-true}"
+      MAP_ZOOM_IN: "${MAP_ZOOM_IN:-3}"
+      MAP_ZOOM_OUT_LEVELS: "${MAP_ZOOM_OUT_LEVELS:-6}"
+      TZ: "America/Sao_Paulo"
+    volumes:
+      - "${DATA_PATH:-./data}:/data:ro"
+      - mapa-web:/mapa
+
+  mapa:
+    image: nginx:alpine
+    container_name: mc-mapa
+    restart: unless-stopped
+    depends_on:
+      - mapa-render
+    ports:
+      - "127.0.0.1:${MAP_PORT:-8081}:80"
+    volumes:
+      - mapa-web:/usr/share/nginx/html:ro
+      # /api/ do mapa vira proxy para o painel (jogadores ao vivo).
+      - ./docker/mapa/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      TZ: "America/Sao_Paulo"
+
+volumes:
+  # O mapa renderizado sao milhares de tiles pequenos: volume nomeado,
+  # nao pasta do Windows - a diferenca medida foi de ~80x.
+  mapa-web:

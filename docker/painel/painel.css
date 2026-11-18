@@ -1,0 +1,871 @@
+/* ═══════════════════════════════════════════════════════════════════
+   Aether — Mesa do Mestre
+
+   O mundo é o sujeito, o comando é o verbo, a administração é rodapé.
+   O mapa ocupa a tela inteira e nunca sai; a linha de comando vive
+   fixa embaixo dele; o servidor sobe por cima e fecha no Esc.
+
+   Regra que segura tudo: todo botão termina escrevendo uma linha que
+   você vê antes de mandar. Nada acontece por baixo do pano.
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root {
+  --noite:   #0c0b0a;
+  --painel:  #131211;
+  --cartao:  #1a1917;
+  --campo:   #232120;
+  --realce:  #2e2b29;
+  --linha:   #322f2c;
+  --linha2:  #3d3a36;
+  --linha3:  #2b2825;  /* fio bem escuro de cartão/modal — antes 3 hex quase iguais soltos pelo arquivo */
+  --negro:   #0e0d0c;  /* fundo de campo de texto e de rodapé de tapume */
+  --texto:   #f0ece6;
+  --texto2:  #d6d1c9;
+  --texto3:  #a39c92;
+  --texto4:  #6f685f;
+  --texto5:  #57514a;
+
+  --grama:    #63c95e;
+  --grama-cl: #8ade86;
+  --grama-es: #1c2a15;
+  --grama-bd: #3a5c2c;
+  --grama2:   #3d8f42;  /* segundo tom do ícone de bloco de grama, na marca */
+  --tocha:    #d99a45;
+  --tocha-es: #2a2113;
+  --tocha-bd: #4a3a20;
+  --redstone: #e05252;
+  --redstone-es: #2c1414;
+  --redstone-bd: #5c2a2a;
+  --vida:     #c9453f;  /* vermelho da barra de vida — mais quente que o redstone de alerta */
+  --agua:     #14303c;  /* fundo do palco enquanto o mapa ainda não respondeu */
+  --encanto:  #9f8ad0;  /* roxo — só para o brilho de encantamento, em lugar nenhum mais da casa */
+
+  /* Seis tons para diferenciar jogador por jogador — sem azul (saiu da
+     paleta com o --diamante) e sem roxo (reservado ao --encanto). */
+  --jog3: #c9683f;
+  --jog4: #d9c452;
+  --jog5: #8fae5c;
+  --jog6: #a67c52;
+
+  /* ── Escala tipográfica ──
+     Cinco degraus e nenhum a mais: rótulo, apoio, corpo, destaque,
+     título. Todo font-size do painel usa uma destas cinco variáveis —
+     nada abaixo de --fs-rotulo, nada solto entre os degraus. */
+  --fs-rotulo:   11px;
+  --fs-apoio:    12.5px;
+  --fs-corpo:    14px;
+  --fs-destaque: 17px;
+  --fs-titulo:   22px;
+
+  /* ── Espaço ──
+     Duas medidas só: --calha é a folga entre a grade e a borda da janela
+     (e o padding horizontal de quem flutua sobre o mapa); --respiro é o
+     espaço interno entre blocos dentro de uma coluna ou de um cartão. */
+  --calha:   16px;
+  --respiro: 14px;
+
+  /* ── Ritmo ──
+     Três durações e uma curva só, para toda transição e animação do
+     painel: --rapido é feedback de contato (hover, foco, apertar);
+     --normal é algo entrando ou saindo por cima do resto (sugestões,
+     fita, popovers, HUD, menu); --lento é trocar de tela (tapume, camada
+     do mapa, modo de jogo). Nenhuma duração literal fora daqui. */
+  --rapido: 120ms;
+  --normal: 220ms;
+  --lento:  420ms;
+  --curva:  cubic-bezier(.22,1,.36,1);
+
+  /* ── Camadas ──
+     Cinco degraus para todo z-index do painel, não um por elemento: tudo
+     que mora numa célula da grade nunca se sobrepõe a outra célula, então
+     divide o mesmo --z-palco. Só quem é position:fixed (segue o cursor
+     ou abre por cima do resto) precisa de um degrau próprio, em ordem:
+     HUD · menu/popover · tapume · brinde. */
+  --z-palco:     20;
+  --z-flutuante: 30;
+  --z-popover:   40;
+  --z-tapume:    50;
+  --z-brinde:    60;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  background: var(--noite); color: var(--texto);
+  font-family: Barlow, system-ui, sans-serif; font-size:var(--fs-corpo); line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+input, button, select, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+button { cursor: pointer; }
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--realce); }
+::-webkit-scrollbar-thumb:hover { background: var(--linha2); }
+
+/* ── Formas da identidade ──
+   O canto não é arredondado: é cortado, como um bloco lascado.
+   A luz vem sempre de cima, como uma linha clara de 1px no topo. */
+.chanfro   { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px)); }
+.chanfro-p { clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px)); }
+.luz  { box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 32px rgba(0,0,0,.55); }
+.luz2 { box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 24px 64px rgba(0,0,0,.7); }
+.vidro { background: rgba(14,13,12,.88); backdrop-filter: blur(10px); border: 1px solid var(--linha3); }
+
+/* ── A superfície flutuante ──
+   Topo, seletor de camadas, ferramentas do mapa, HUD, barra de comando,
+   ficha, popover de repetir e menu do mapa eram cinco combinações de
+   vidro+chanfro+luz, cada uma com o próprio padding e o próprio raio de
+   corte — cinco aplicativos que pareciam não se conhecer. Agora são um
+   componente só: o vidro, o brilho e o corte vêm daqui; só o corte muda
+   na variante densa, para quem carrega ícone ou número em vez de texto.
+   Cada elemento continua livre para o próprio padding e a própria
+   posição — o que se unifica é a superfície, não o conteúdo. */
+.superficie {
+  background: rgba(14,13,12,.88);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--linha3);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 12px 32px rgba(0,0,0,.55);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+}
+.superficie--densa {
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+
+.disp { font-family: Oxanium, sans-serif; letter-spacing: .01em; }
+.mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.rot {
+  font-family: Oxanium, sans-serif; font-size:var(--fs-rotulo); font-weight: 700;
+  letter-spacing: .18em; text-transform: uppercase; color: var(--texto4);
+}
+
+/* ── O casco: a grade que tudo ancora ──
+   Três colunas (esquerda fixa · palco fluido · direita fixa) e três
+   faixas (topo · palco · rodapé). Todo elemento que antes vivia em
+   position:fixed com left/right/top/bottom escolhidos a dedo agora mora
+   numa célula desta grade — nenhum deles sabe mais o pixel da janela,
+   só a própria célula. Só o que segue o cursor ou abre por cima do
+   resto (HUD do mapa, menus, popover, ficha, tapumes, brindes) continua
+   position:fixed, porque isso não é lugar de grade.
+   O casco não tem padding: quem cria o respiro da borda é cada célula,
+   para o palco (o mapa) poder ocupar a grade inteira, de ponta a ponta. */
+#casco {
+  height: 100%;
+  display: grid;
+  grid-template-columns: [esq] 220px [palco] 1fr [dir] 250px [fim];
+  grid-template-rows: [topo] auto [meio] 1fr [rodape] auto [pe];
+}
+
+/* ── Camada 1: o palco ── */
+#palco {
+  grid-column: esq / fim; grid-row: topo / pe; background: var(--agua);
+  /* ── Coreografia de abertura ──
+     O mapa é o primeiro a existir na tela: nasce sem atraso. As colunas
+     e a barra de comando vêm depois, encadeadas por animation-delay
+     (ver #coluna-esq/#coluna-dir e #area-linha). Fill-mode backwards
+     mantém o estado "antes" só durante o próprio atraso — nunca sobra
+     um elemento em opacity:0 depois que a animação termina, porque o
+     "to" já é o estado normal, não um valor que o JS precisa desfazer. */
+  animation: surgir var(--lento) var(--curva) backwards;
+}
+@keyframes surgir { from { opacity: 0; } to { opacity: 1; } }
+#mapa { width: 100%; height: 100%; border: 0; display: block; filter: saturate(.94) brightness(.92); }
+#mapa-ausente {
+  position: absolute; inset: 0; display: none;
+  flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: var(--noite); color: var(--texto4); text-align: center; padding: 40px;
+}
+.mapa-ausente-titulo { font-size: var(--fs-corpo); font-weight: 700; color: var(--texto3); }
+.mapa-ausente-texto  { font-size: var(--fs-apoio); max-width: 420px; }
+#veu {
+  grid-column: esq / fim; grid-row: topo / pe; pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(8,7,7,.82) 0, rgba(8,7,7,0) 190px),
+    linear-gradient(to top,    rgba(8,7,7,.86) 0, rgba(8,7,7,0) 240px),
+    linear-gradient(to right,  rgba(8,7,7,.72) 0, rgba(8,7,7,0) 300px),
+    linear-gradient(to left,   rgba(8,7,7,.72) 0, rgba(8,7,7,0) 320px);
+}
+#grao {
+  grid-column: esq / fim; grid-row: topo / pe; pointer-events: none;
+  opacity: .38; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.3'/%3E%3C/svg%3E");
+}
+
+/* ── Camada 2: ação ── */
+#topo {
+  grid-column: esq / fim; grid-row: topo; z-index: var(--z-palco);
+  margin: var(--calha) var(--calha) 0;
+  display: flex; align-items: center; gap: var(--respiro);
+}
+.pilula { display: flex; align-items: center; gap: 13px; padding: 9px 15px; }
+.marca-bloco {
+  width: 24px; height: 24px; flex: none;
+  background: linear-gradient(158deg, var(--grama) 0 52%, var(--grama2) 52% 100%);
+}
+.tracinho { width: 1px; height: 18px; background: var(--linha); flex: none; }
+.tracinho-alto { height: 24px; }
+.pulso { width: 7px; height: 7px; flex: none; background: var(--grama); box-shadow: 0 0 9px var(--grama); }
+.pulso.parado { background: var(--redstone); box-shadow: 0 0 9px var(--redstone); }
+.pulso.morno  { background: var(--tocha);    box-shadow: 0 0 9px var(--tocha); }
+
+/* A marca é título (mesmo degrau de SERVIDOR, no tapume); o resto do topo
+   é apoio — a mesma leitura de "detalhe mono" que CPU, memória e hora
+   já tinham antes, agora nomeada em vez de repetida em cada span. */
+.marca-nome { font-size: var(--fs-titulo); font-weight: 800; letter-spacing: .05em; }
+.pilula-direita { margin-left: auto; }
+.botao-abrir-servidor { color: var(--texto3); }
+.botao-modo-jogo { color: var(--texto3); }
+.botao-modo-jogo[aria-pressed="true"] { color: var(--grama-cl); }
+.pilula-rotulo { font-size: var(--fs-apoio); font-weight: 600; }
+#estado-curto { font-size: var(--fs-apoio); color: var(--grama-cl); font-weight: 500; }
+
+#coluna-esq {
+  grid-column: esq / palco; grid-row: meio; z-index: var(--z-palco); min-height: 0;
+  margin: var(--respiro) 0 var(--calha) var(--calha);
+  overflow-y: auto;
+  /* Desliza da própria borda, um pouco depois do mapa — --rapido como
+     atraso porque é o menor token que a régua de ritmo tem, o mais perto
+     do "logo em seguida" que o desenho pede sem inventar um número novo. */
+  animation: entrar-esq var(--lento) var(--curva) var(--rapido) backwards;
+  transition: transform var(--lento) var(--curva), opacity var(--lento) var(--curva);
+}
+#coluna-dir {
+  grid-column: dir / fim; grid-row: meio; z-index: var(--z-palco); min-height: 0;
+  margin: var(--respiro) var(--calha) var(--calha) 0;
+  display: flex; flex-direction: column;
+  animation: entrar-dir var(--lento) var(--curva) var(--rapido) backwards;
+  transition: transform var(--lento) var(--curva), opacity var(--lento) var(--curva);
+}
+/* ── Modo de jogo (tecla F) ──
+   Some com tudo que não é mapa, comando ou os últimos acontecimentos: as
+   colunas e o seletor de camada saem pela própria borda, do jeito que
+   entraram na abertura. animation:none corta a keyframe de entrada — só
+   a transition acima anima o vaivém, tanto ligando quanto desligando. */
+.modo-jogo #coluna-esq { animation: none; transform: translateX(-100%); opacity: 0; pointer-events: none; }
+.modo-jogo #coluna-dir { animation: none; transform: translateX(100%); opacity: 0; pointer-events: none; }
+.modo-jogo #camadas-mapa { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+@keyframes entrar-esq { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+@keyframes entrar-dir { from { opacity: 0; transform: translateX(24px); }  to { opacity: 1; transform: none; } }
+.rot-topo  { padding: 0 4px 8px; }
+.rot-bloco { padding: 18px 4px 8px; }
+.rot-fim   { padding-right: 2px; flex: none; }
+.linha-cabeca-coluna { display: flex; align-items: center; gap: 8px; padding: 0 4px 8px; }
+#lista-jogadores { display: flex; flex-direction: column; gap: 7px; }
+#regras-mundo { gap: 0; }
+#lista-eventos { padding: 0; overflow-y: auto; min-height: 0; }
+
+/* ── O cartão do jogador — o herói da coluna ──
+   Maior que tudo ao redor de propósito: quem está no mundo é o sujeito
+   de quase todo comando. Nome, onde ele está, e um jeito de levar o
+   mapa até lá sem precisar abrir a ficha. */
+.cartao-jogador {
+  padding: 12px; border-left: 3px solid transparent; cursor: pointer;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color var(--rapido) var(--curva), background var(--rapido) var(--curva);
+}
+.cartao-jogador:hover { background: rgba(30,28,26,.9); }
+.cartao-jogador.alvo { border-left-color: var(--grama); }
+.jogador-cabeca { display: flex; align-items: center; gap: 10px; }
+.jogador-id { flex: 1; min-width: 0; }
+.jogador-nome { font-size: var(--fs-destaque); font-weight: 700; color: var(--texto); }
+.jogador-onde {
+  font-size: var(--fs-rotulo); color: var(--texto4); margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.jogador-centralizar {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 6px 10px; font-size: var(--fs-rotulo);
+}
+.jogador-centralizar svg { width: 13px; height: 13px; flex: none; }
+
+/* A vida no cartão do jogador — texto e barrinha, os dois à direita da
+   cabeça do cartão. Migrou de style= embutido no HTML: só a largura da
+   barra ainda é dinâmica, e essa vira uma custom property (--vida-pct),
+   nunca um atributo de estilo escrito por inteiro pelo JS. */
+.stat-vida { font-size: var(--fs-rotulo); color: var(--texto3); text-align: right; }
+.barra-vida {
+  margin-top: 3px; width: 52px; height: 4px; border-radius: 2px;
+  background: var(--texto5); overflow: hidden;
+}
+.barra-vida i { display: block; width: var(--vida-pct, 0%); height: 100%; background: var(--vida); }
+.ficha-vida { font-size: var(--fs-rotulo); color: var(--vida); margin-top: 2px; }
+
+.avatar {
+  width: 36px; height: 36px; flex: none; color: var(--noite);
+  font-size: var(--fs-destaque); font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+/* Seis tons fixos para diferenciar jogador por jogador — a cor vem de um
+   hash do nome, mas a classe é escolhida entre estas seis, nunca escrita
+   direto num estilo em linha. */
+.jog-cor-0 { background: var(--grama); }
+.jog-cor-1 { background: var(--tocha); }
+.jog-cor-2 { background: var(--jog3); }
+.jog-cor-3 { background: var(--jog4); }
+.jog-cor-4 { background: var(--jog5); }
+.jog-cor-5 { background: var(--jog6); }
+
+.evento { display: flex; gap: 10px; padding: 8px 13px; border-bottom: 1px solid var(--linha3); }
+.evento:last-child { border-bottom: 0; }
+.evento .fita { width: 3px; flex: none; }
+
+/* ── A linha: o herói ── */
+/* A área da linha agora tem dois moradores: a coluna de comando (o que
+   já existia) e a prévia do item, que só aparece em cima de um "give
+   ... with". Em flexbox com quebra: cabendo os dois lado a lado, a
+   prévia fica encostada na barra; sem espaço (1024×640, ou telas mais
+   estreitas), ela desce para a própria linha — nunca sobe para cima do
+   autocomplete, que só mora acima da barra dentro da coluna de comando. */
+#area-linha {
+  grid-column: palco; grid-row: rodape; z-index: var(--z-palco);
+  justify-self: center; align-self: end;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end;
+  gap: var(--respiro);
+  width: min(1180px, calc(100% - 2 * var(--calha)));
+  margin-bottom: var(--calha);
+  /* Sobe por último: o atraso é a soma de --rapido (o mesmo que atrasa
+     as colunas) com --normal, para entrar depois que elas já chegaram,
+     sem literal novo — só soma de tokens existentes. */
+  animation: subir-linha var(--lento) var(--curva) calc(var(--rapido) + var(--normal)) backwards;
+}
+@keyframes subir-linha { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+/* A base de 640px fazia a dupla não caber ao lado nem em 1280px de
+   largura (778px de coluna) — só passava a caber lá pelos 1470px. Uma
+   base menor deixa a prévia (260px) sentar ao lado já em 1280, e ainda
+   cresce até 900px quando o palco é bem largo (1600px). */
+#coluna-comando { flex: 1 1 460px; max-width: 900px; min-width: 0; }
+/* ── A fita de acontecimentos ──
+   Tudo que o mundo responde passa por aqui, já em português. O formato
+   com "|" que o script usa para falar com o painel fica escondido atrás
+   de um clique: some do caminho sem sumir de vez. */
+.acont {
+  display: grid; grid-template-columns: 20px 1fr; gap: 9px;
+  padding: 9px 11px; border-bottom: 1px solid var(--linha3);
+  border-left: 2px solid var(--linha2); cursor: pointer;
+  animation: chegar var(--normal) var(--curva) both;
+}
+.acont:last-child { border-bottom: 0; }
+.acont:hover { background: rgba(30,28,26,.55); }
+/* Só o item local guarda a linha crua do script para revelar — nos
+   outros o clique não abriria nada, então o cursor não promete que abre. */
+.acont:not(.tem-cru) { cursor: default; }
+.acont.bom   { border-left-color: var(--grama); }
+.acont.morno { border-left-color: var(--tocha); }
+.acont.ruim  { border-left-color: var(--redstone); }
+.acont .icone { width: 20px; height: 20px; display: grid; place-items: center; }
+.acont .icone svg { width: 14px; height: 14px; }
+.acont-corpo { min-width: 0; }
+.acont .titulo { font-size: var(--fs-corpo); color: var(--texto2); line-height: 1.35; }
+.acont .titulo b { color: var(--texto); font-weight: 600; }
+.acont .detalhe { font-size:var(--fs-apoio); color: var(--texto4); margin-top: 2px; line-height: 1.35; }
+.acont .detalhe b { color: var(--texto3); font-weight: 600; }
+.acont .quando { font-family: "JetBrains Mono", monospace; font-size:var(--fs-rotulo); color: var(--texto5); }
+.acont .cru {
+  display: none; margin-top: 6px; padding: 5px 7px; background: var(--noite);
+  font-family: "JetBrains Mono", monospace; font-size:var(--fs-rotulo); color: var(--texto5);
+  word-break: break-all; white-space: pre-wrap;
+}
+.acont.aberto .cru { display: block; }
+@keyframes chegar { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+
+/* A lista rola em vez de cortar: com 39 poderes e 1869 itens, mostrar
+   só cinco e não deixar ver o resto era o pior dos dois mundos. Mas
+   cobrir o mapa inteiro também erra para o outro lado — o teto de nove
+   linhas (~34px cada) deixa o mapa respirando atrás mesmo com a lista
+   cheia. */
+#sugestoes { margin-bottom: 8px; max-height: 306px; overflow-y: auto; overflow-x: hidden; }
+#sugestoes .rodape {
+  position: sticky; bottom: 0; display: flex; gap: 14px; padding: 6px 15px;
+  background: rgba(14,13,12,.97); border-top: 1px solid var(--linha);
+  font-size:var(--fs-rotulo); color: var(--texto5);
+}
+.rodape-atalhos { margin-left: auto; }
+#sugestoes .sug {
+  display: flex; align-items: baseline; gap: 12px; padding: 8px 15px;
+  border-left: 2px solid transparent; cursor: pointer;
+}
+#sugestoes .sug.ativa {
+  background: rgba(99,201,94,.14);
+  border-left-color: var(--grama);
+  box-shadow: inset 0 0 0 1px rgba(99,201,94,.22);
+}
+/* O trecho que você digitou, aceso dentro do nome. */
+#sugestoes .casa { color: var(--grama); font-weight: 700; }
+#sugestoes .sug .nome { font-size:var(--fs-apoio); font-weight: 700; color: var(--texto2); min-width: 132px; }
+#sugestoes .sug.ativa .nome { color: var(--grama-cl); }
+#sugestoes .sug .args { font-size:var(--fs-apoio); color: var(--texto4); }
+#sugestoes .sug .desc { margin-left: auto; font-size:var(--fs-apoio); color: var(--texto3); text-align: right; }
+
+#barra {
+  display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  border-color: var(--linha2) !important;
+}
+#entrada {
+  flex: 1; min-width: 0; background: transparent; border: 0; outline: none;
+  color: var(--texto); font-size:var(--fs-corpo); letter-spacing: -.01em;
+}
+#entrada::placeholder { color: var(--texto5); }
+.barra-marca { font-size: var(--fs-destaque); color: var(--grama); font-weight: 700; line-height: 1; }
+
+/* ── A prévia do item ──
+   O tooltip do jogo, em miniatura: nome, encantamento em roxo com nível
+   romano, poder com o valor, descrição em itálico cinza. */
+#previa-item {
+  flex: 0 1 260px; max-width: 260px; min-width: 0;
+  padding: 12px 14px; display: flex; flex-direction: column; gap: 5px;
+}
+#previa-item[hidden] { display: none; }
+.previa-nome {
+  font-family: "JetBrains Mono", monospace; font-size: var(--fs-apoio);
+  font-weight: 700; color: var(--tocha);
+}
+.previa-encanto { font-family: "JetBrains Mono", monospace; font-size: var(--fs-rotulo); color: var(--encanto); }
+.previa-poder   { font-family: "JetBrains Mono", monospace; font-size: var(--fs-rotulo); color: var(--texto3); }
+.previa-lore    { font-size: var(--fs-rotulo); color: var(--texto4); font-style: italic; margin-top: 3px; }
+
+/* ── Os chips ──
+   Antes eram dois retângulos com um valor e nenhuma palavra: "@a" e "×1",
+   parecidos e fazendo coisas diferentes. O rótulo miúdo em cima resolve
+   isso sem tomar espaço da linha. */
+.chip {
+  display: flex; align-items: center; gap: 8px; padding: 5px 11px;
+  background: var(--campo); border: 1px solid var(--linha2); color: var(--texto2);
+  font-size:var(--fs-apoio); flex: none;
+  transition: border-color var(--rapido) var(--curva), background var(--rapido) var(--curva), transform var(--rapido) var(--curva);
+}
+.chip:hover { border-color: var(--texto5); background: var(--realce); }
+.chip:active { transform: translateY(1px); }
+.chip.verde { background: var(--grama-es); border-color: var(--grama-bd); color: var(--grama-cl); }
+.chip.verde:hover { background: rgba(99,201,94,.16); }
+.chip .rotulo {
+  font-family: Oxanium, sans-serif; font-size:var(--fs-rotulo); font-weight: 700;
+  letter-spacing: .16em; text-transform: uppercase; color: var(--texto5);
+  line-height: 1;
+}
+.chip .valor { font-family: "JetBrains Mono", monospace; font-weight: 700; font-size:var(--fs-apoio); line-height: 1; }
+.chip .empilha { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.chip.ambar .valor { color: var(--tocha); }
+.chip.ambar.forte { border-color: var(--tocha-bd); background: var(--tocha-es); }
+
+/* O seletor de repetição: em vez de ciclar às cegas até chegar em 50. */
+#pop-vezes {
+  position: fixed; z-index: var(--z-popover); padding: 5px; min-width: 148px;
+  animation: brotar var(--normal) var(--curva) both;
+}
+#pop-vezes[hidden] { display: none; }
+@keyframes brotar { from { opacity: 0; transform: scale(.95) translateY(4px); } to { opacity: 1; transform: none; } }
+#pop-vezes .passo {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 6px 10px;
+  background: transparent; border: 0; text-align: left; color: var(--texto2);
+  font-family: "JetBrains Mono", monospace; font-size:var(--fs-apoio);
+  transition: background var(--rapido) var(--curva);
+}
+#pop-vezes .passo:hover { background: var(--realce); }
+#pop-vezes .passo.atual { background: var(--tocha-es); color: var(--tocha); }
+#pop-vezes .passo .porque { margin-left: auto; font-family: Barlow, sans-serif; font-size:var(--fs-rotulo); color: var(--texto5); }
+#pop-vezes .campo-livre {
+  display: flex; align-items: center; gap: 7px; margin-top: 4px; padding: 6px 10px;
+  border-top: 1px solid var(--linha);
+}
+#pop-vezes .campo-livre input {
+  width: 100%; background: var(--campo); border: 1px solid var(--linha2); outline: 0;
+  padding: 4px 7px; color: var(--texto); font-family: "JetBrains Mono", monospace; font-size:var(--fs-apoio);
+}
+#pop-vezes .campo-livre input:focus { border-color: var(--tocha-bd); }
+
+/* ── MANDAR ── enquanto o mundo pensa, o botão mostra a espera. */
+.botao-mandar {
+  padding: 9px 20px; background: var(--grama); border: 0; color: var(--noite);
+  font-size: var(--fs-corpo); font-weight: 800; letter-spacing: .06em; flex: none;
+  position: relative; overflow: hidden; transition: background var(--rapido) var(--curva), transform var(--rapido) var(--curva);
+}
+.botao-mandar:hover { background: var(--grama-cl); }
+.botao-mandar:active { transform: translateY(1px); }
+.botao-mandar:disabled { cursor: default; }
+.botao-mandar.indo { color: transparent; background: var(--grama-bd); }
+.botao-mandar.indo::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(138,222,134,.55), transparent);
+  /* Sweep contínuo: --lento porque é o mesmo fôlego de uma troca de tela,
+     só que em loop enquanto o mundo ainda não respondeu. */
+  animation: varrer var(--lento) var(--curva) infinite;
+}
+@keyframes varrer { from { transform: translateX(-100%) } to { transform: translateX(100%) } }
+
+/* ── A fita de repetir ──
+   Rola na horizontal em vez de cortar na segunda pílula, e o corte é pelo
+   meio: o começo e o fim de um comando são justamente o que diferencia
+   um do outro - cortar só o fim escondia exatamente a parte útil. */
+#rodape-linha { display: flex; align-items: center; gap: 9px; margin-top: 9px; }
+#historico-pilulas {
+  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  padding-bottom: 2px; min-width: 0;
+}
+#historico-pilulas::-webkit-scrollbar { display: none; }
+.pilula-hist {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 4px 10px; background: rgba(26,25,23,.9); border: 1px solid var(--linha3);
+  color: var(--texto3); font-size:var(--fs-apoio);
+  transition: color var(--rapido) var(--curva), border-color var(--rapido) var(--curva);
+}
+.pilula-hist:hover { color: var(--texto); border-color: var(--grama-bd); }
+.pilula-hist .alfinete { color: var(--texto5); font-size:var(--fs-rotulo); line-height: 1; transition: color var(--rapido) var(--curva); }
+.pilula-hist .alfinete:hover { color: var(--tocha); }
+.pilula-hist.fixa { border-color: var(--tocha-bd); }
+.pilula-hist.fixa .alfinete { color: var(--tocha); }
+.pilula-hist .corpo { white-space: nowrap; }
+
+.dica { font-size:var(--fs-rotulo); color: var(--texto5); }
+.dica b { color: var(--texto3); font-weight: 500; }
+
+/* ── A chave de mudo, na cabeça da fita ── */
+.botao-mudo {
+  margin-left: auto; padding: 2px; background: transparent; border: 0;
+  color: var(--texto5); line-height: 0; transition: color var(--rapido) var(--curva);
+}
+.botao-mudo svg { width: 14px; height: 14px; }
+.botao-mudo:hover { color: var(--texto3); }
+.botao-mudo.ligado { color: var(--grama); }
+
+/* Quem pediu menos movimento recebe menos movimento — inclusive nenhum. */
+@media (prefers-reduced-motion: reduce) {
+  /* Sem isso, quem pede menos movimento ainda via as colunas escondidas
+     pelos --rapido/--normal de atraso da coreografia de abertura — a
+     duração encolheu para .001ms, mas o delay ficava do tamanho de
+     sempre, e o elemento passava esse tempo todo em opacity:0. */
+  *, *::before, *::after {
+    animation-duration: .001ms !important; transition-duration: .001ms !important;
+    animation-delay: 0s !important;
+  }
+}
+
+/* ── O mapa como terreno de trabalho ── */
+
+/* O que está debaixo do cursor, seguindo o cursor. O vidro, a borda e o
+   corte vêm da .superficie — aqui só o que é próprio do HUD: posição,
+   opacidade e a fonte mono dos números. */
+#hud-mapa {
+  position: fixed; z-index: var(--z-flutuante); pointer-events: none;
+  padding: 5px 9px;
+  font-family: "JetBrains Mono", monospace; font-size:var(--fs-apoio); color: var(--texto2);
+  white-space: nowrap; opacity: 0; transition: opacity var(--normal) var(--curva);
+}
+#hud-mapa.visivel { opacity: 1; }
+#hud-mapa b { color: var(--grama-cl); font-weight: 500; }
+#hud-mapa .fraco { color: var(--texto5); }
+
+/* O clique deixou de ser "teleportar" e virou uma escolha. */
+#menu-mapa {
+  position: fixed; z-index: var(--z-popover); min-width: 194px; padding: 5px;
+  animation: brotar var(--normal) var(--curva) both;
+}
+#menu-mapa[hidden] { display: none; }
+#menu-mapa .onde {
+  padding: 6px 10px 8px; border-bottom: 1px solid var(--linha); margin-bottom: 4px;
+  font-family: "JetBrains Mono", monospace; font-size:var(--fs-apoio); color: var(--texto4);
+}
+#menu-mapa .onde b { color: var(--texto2); font-weight: 500; }
+#menu-mapa button {
+  display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px;
+  border: 0; background: transparent; text-align: left; color: var(--texto2);
+  font-size:var(--fs-apoio); transition: background var(--rapido) var(--curva), color var(--rapido) var(--curva);
+}
+#menu-mapa button:hover { background: var(--realce); color: var(--texto); }
+#menu-mapa button svg { width: 14px; height: 14px; flex: none; color: var(--texto4); }
+#menu-mapa button:hover svg { color: var(--grama); }
+#menu-mapa button.perigo:hover svg { color: var(--redstone); }
+#menu-mapa kbd {
+  margin-left: auto; font-family: "JetBrains Mono", monospace;
+  font-size:var(--fs-rotulo); color: var(--texto5);
+}
+
+/* O seletor de camadas, centrado no alto do mapa — mesma célula do
+   palco, encostado no topo. */
+#camadas-mapa {
+  grid-column: palco; grid-row: meio; z-index: var(--z-palco);
+  justify-self: center; align-self: start; margin-top: var(--respiro);
+  display: flex; gap: 3px; padding: 4px;
+  transition: transform var(--lento) var(--curva), opacity var(--lento) var(--curva);
+}
+#camadas-mapa[hidden] { display: none; }
+
+/* ── A fita mínima ──
+   Os 3 acontecimentos mais recentes, semitransparentes, num canto — para
+   não perder o que aconteceu sem trazer a coluna inteira de volta. É um
+   clone: desenharFita() copia os primeiros .acont para cá a cada redesenho.
+   Escondida por padrão (display:none) — só volta no modo de jogo, ou lá
+   embaixo no @media que tira #coluna-dir por falta de espaço, que é onde
+   a fita normal mora e some junto. */
+#fita-minima {
+  grid-column: palco; grid-row: meio; z-index: var(--z-palco);
+  justify-self: start; align-self: end; margin: 0 0 var(--calha) var(--calha);
+  width: 260px; max-height: 40%; overflow: hidden;
+  opacity: .7; pointer-events: none;
+  display: none;
+}
+#fita-minima[hidden] { display: none; }
+#fita-minima .acont { cursor: default; }
+#fita-minima .acont:last-child { border-bottom: 1px solid var(--linha3); }
+.modo-jogo #fita-minima:not([hidden]) { display: block; }
+#camadas-mapa button {
+  padding: 6px 14px; border: 0; background: transparent;
+  font-family: Oxanium, sans-serif; font-size:var(--fs-apoio); font-weight: 700; letter-spacing: .05em;
+  color: var(--texto4); transition: background var(--rapido) var(--curva), color var(--rapido) var(--curva);
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+}
+#camadas-mapa button:hover { color: var(--texto2); background: rgba(255,255,255,.05); }
+#camadas-mapa button[aria-pressed="true"] { background: var(--realce); color: var(--texto); }
+
+/* Ferramentas do mapa, no canto onde a coluna da direita termina. */
+#ferramentas-mapa {
+  grid-column: dir / fim; grid-row: rodape; z-index: var(--z-palco);
+  justify-self: end; align-self: end; margin: 0 var(--calha) var(--calha) 0;
+  display: flex; flex-direction: column; gap: 4px; padding: 4px;
+}
+#ferramentas-mapa button {
+  width: 34px; height: 34px; display: grid; place-items: center;
+  border: 0; background: transparent; color: var(--texto4);
+  transition: background var(--rapido) var(--curva), color var(--rapido) var(--curva);
+}
+#ferramentas-mapa button:hover { background: var(--realce); color: var(--texto2); }
+#ferramentas-mapa button[aria-pressed="true"] { background: var(--tocha-es); color: var(--tocha); }
+#ferramentas-mapa button svg { width: 16px; height: 16px; }
+#ferramentas-mapa .risca { height: 1px; background: var(--linha); margin: 2px 5px; }
+
+/* ── Céu e tempo ──
+   Antes eram seis botões cinzas iguais que mandavam comando e não sabiam
+   de nada. Agora cada um mostra o que está valendo no mundo. */
+.bloco-controle { padding: 10px; display: flex; flex-direction: column; gap: 11px; }
+
+.segmentado { display: flex; gap: 3px; background: var(--campo); padding: 3px; }
+.segmentado button {
+  flex: 1; padding: 7px 0; border: 0; background: transparent;
+  color: var(--texto5); display: grid; place-items: center;
+  transition: background var(--rapido) var(--curva), color var(--rapido) var(--curva);
+}
+.segmentado button:hover { color: var(--texto2); background: rgba(255,255,255,.05); }
+.segmentado button[aria-pressed="true"] {
+  background: var(--grama-es); color: var(--grama-cl);
+  box-shadow: inset 0 0 0 1px var(--grama-bd);
+}
+.segmentado button svg { width: 16px; height: 16px; }
+.segmentado.incerto button[aria-pressed="true"] { background: var(--campo); color: var(--texto4); box-shadow: none; }
+
+/* Rótulo de texto para os segmentados que não cabem em ícone (abas do
+   servidor, filtros de log e da fita) — nomes curtos o bastante para não
+   precisar do "…", que era a saída de emergência quando cortava. */
+.segmentado--texto button {
+  font-family: Oxanium, sans-serif; font-size: var(--fs-rotulo); font-weight: 700;
+  letter-spacing: .02em; text-transform: uppercase; padding: 7px 3px; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.chave-linha {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 5px 2px; font-size:var(--fs-apoio); color: var(--texto3);
+}
+.chave {
+  width: 32px; height: 17px; flex: none; padding: 2px; border: 0;
+  background: var(--campo); box-shadow: inset 0 0 0 1px var(--linha2);
+  transition: background var(--rapido) var(--curva), box-shadow var(--rapido) var(--curva);
+}
+.chave i {
+  display: block; width: 13px; height: 13px; background: var(--texto5);
+  transition: transform var(--rapido) var(--curva), background var(--rapido) var(--curva);
+}
+.chave[aria-pressed="true"] { background: var(--grama-es); box-shadow: inset 0 0 0 1px var(--grama-bd); }
+.chave[aria-pressed="true"] i { transform: translateX(15px); background: var(--grama); }
+.chave.incerta { opacity: .45; }
+
+/* ── A ficha do jogador ──
+   Responde duas perguntas só: onde ele está, e como levar o mapa ou ele
+   até o outro. Os atalhos de comando que moravam aqui (curar, força,
+   criativo, nível, raio) saíram — são give/effect/gamemode pela linha,
+   com o nome já preenchido pelo clique no cartão. */
+#ficha {
+  position: fixed; z-index: var(--z-popover); width: 330px; border-color: var(--tocha-bd) !important;
+}
+#ficha .cabeca { display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+                 background: rgba(217,154,69,.08); border-bottom: 1px solid var(--linha2); }
+.avatar--ficha { width: 40px; height: 40px; font-size: var(--fs-titulo); }
+.ficha-id { flex: 1; min-width: 0; }
+.ficha-nome { font-size: var(--fs-destaque); font-weight: 800; letter-spacing: .02em; }
+.ficha-onde { font-size: var(--fs-rotulo); color: var(--texto3); margin-top: 2px; }
+.ficha-fechar { background: none; border: 0; color: var(--texto5); padding: 4px; }
+.ficha-fechar:hover { color: var(--texto2); }
+.ficha-corpo { padding: 14px 16px; }
+.ficha-dica { margin-top: 12px; line-height: 1.4; }
+
+/* ── Camada 3: manutenção ── */
+.tapume {
+  position: fixed; inset: 0; z-index: var(--z-tapume); background: rgba(7,6,6,.84);
+  backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center;
+}
+.tapume[hidden] { display: none; }
+.folha {
+  width: min(1092px, calc(100vw - 60px)); height: min(776px, calc(100vh - 70px));
+  background: var(--painel); border: 1px solid var(--linha2);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.folha > .cabeca {
+  display: flex; align-items: center; gap: 16px; padding: 0 20px; height: 58px;
+  background: var(--cartao); border-bottom: 1px solid var(--linha3); flex: none;
+}
+/* O título do tapume é o mesmo degrau da marca no topo — SERVIDOR é
+   "título" na escala, não um tamanho à parte. */
+.tapume-titulo { font-size: var(--fs-titulo); font-weight: 800; letter-spacing: .06em; }
+.tapume-dica { margin-left: auto; font-size: var(--fs-rotulo); color: var(--texto4); }
+
+.rodape-tapume {
+  flex: none; border-top: 1px solid var(--linha3); background: var(--negro);
+  padding: 14px 20px; display: flex; align-items: center; gap: 16px;
+}
+.rodape-aviso { margin-left: auto; font-size: var(--fs-rotulo); color: var(--texto5); }
+#rodape-versao { font-size: var(--fs-rotulo); color: var(--texto4); }
+
+/* ── As abas do Servidor ──
+   O mesmo componente .segmentado que a mesa usa para clima, hora e o
+   filtro da fita — aqui escolhendo qual pergunta o Servidor responde, em
+   vez de mandar comando. */
+.abas-servidor-barra { flex: none; padding: 14px 20px 0; }
+.abas-servidor { max-width: 480px; }
+
+.paineis-servidor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.painel-aba {
+  flex: 1; min-height: 0; overflow-y: auto;
+  padding: 16px 20px 18px; display: flex; flex-direction: column; gap: 14px;
+}
+.painel-aba[hidden] { display: none; }
+
+.bloco-aba { flex: none; padding-bottom: 14px; border-bottom: 1px solid var(--linha3); }
+.bloco-aba:last-child { border-bottom: 0; padding-bottom: 0; }
+.bloco-aba--cresce { flex: 1; min-height: 0; display: flex; flex-direction: column; border-bottom: 0; padding-bottom: 0; }
+
+.rot-mb12 { margin-bottom: 12px; }
+.linha-cabeca-bloco { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; flex: none; }
+.contador-legenda { font-size: var(--fs-rotulo); color: var(--texto5); }
+.botao-salvar { margin-left: auto; padding: 5px 12px; }
+.linha-botoes { display: flex; gap: 6px; }
+.flex1 { flex: 1; }
+#lista-backups, #lista-addons, #lista-disponiveis, .lista-visitantes {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; min-height: 0;
+}
+.btn {
+  padding: 9px 14px; background: var(--campo); border: 1px solid var(--linha2);
+  color: var(--texto2); font-family: Oxanium, sans-serif; font-size:var(--fs-apoio); font-weight: 600;
+}
+.btn:hover { border-color: var(--texto5); color: var(--texto); }
+.btn.verde  { background: var(--grama-es);    border-color: var(--grama-bd);    color: var(--grama-cl); }
+.btn.tocha  { background: var(--tocha);       border-color: var(--tocha);       color: var(--noite); font-weight: 800; }
+.btn.perigo { background: rgba(224,82,82,.08); border-color: var(--redstone-bd); color: var(--redstone); }
+.btn:disabled { opacity: .45; cursor: default; }
+/* O que Reiniciar/Desligar custam a quem está jogando, dentro do próprio
+   botão — visto antes do clique, não só na confirmação. */
+.btn-consequencia { color: var(--redstone); font-weight: 500; }
+
+.item-lista {
+  display: flex; align-items: center; gap: 11px; padding: 10px 13px;
+  background: var(--cartao); border: 1px solid var(--linha3);
+  width: 100%; text-align: left; font-size: inherit;
+}
+.item-lista--recente { background: rgba(99,201,94,.05); border-color: var(--grama-bd); }
+.fita-item { width: 3px; height: 26px; flex: none; background: var(--texto5); }
+.fita-item--recente { background: var(--grama); }
+.texto-corpo { flex: 1; min-width: 0; }
+.texto-titulo { font-size: var(--fs-apoio); font-weight: 600; }
+.texto-titulo--corta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.texto-detalhe { font-size: var(--fs-rotulo); color: var(--texto4); }
+.botao-lista-acao { padding: 5px 12px; font-size: var(--fs-apoio); flex: none; }
+.addon-icone { width: 26px; height: 26px; flex: none; }
+.addon-icone--bp { background: var(--grama); }
+.addon-icone--rp { background: var(--tocha); }
+
+.selo {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px;
+  font-size:var(--fs-apoio); font-weight: 500;
+}
+.selo.verde { background: var(--grama-es); border: 1px solid var(--grama-bd); color: var(--grama-cl); }
+.selo.tocha { background: var(--tocha-es); border: 1px solid var(--tocha-bd); color: var(--tocha); }
+.selo.vermelho { background: var(--redstone-es); border: 1px solid var(--redstone-bd); color: var(--redstone); }
+
+.vazio { padding: 22px 14px; text-align: center; color: var(--texto5); font-size:var(--fs-apoio); }
+
+/* ── Saúde: a primeira pergunta, não telemetria ──
+   Quatro cartões do mesmo peso — no ar, backup, mapa, carga — e só o de
+   carga (ou o de backup atrasado) ganha cor de alerta. CPU e memória de
+   verdade ficam menores, numa linha própria embaixo. */
+.saude-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.saude-cartao { padding: 12px 13px; background: var(--cartao); border: 1px solid var(--linha3); }
+.saude-cartao--alerta { border-color: var(--redstone-bd); background: rgba(224,82,82,.07); }
+.saude-cartao--alerta .saude-valor { color: var(--redstone); }
+.saude-valor {
+  font-family: Oxanium, sans-serif; font-size: var(--fs-destaque); font-weight: 800;
+  color: var(--texto2); line-height: 1.15;
+}
+.saude-cartao .rot { margin-top: 4px; }
+.saude-miudo { display: flex; flex-wrap: wrap; gap: 18px; font-size: var(--fs-rotulo); color: var(--texto4); }
+.saude-miudo b { color: var(--texto3); font-weight: 600; }
+
+/* ── Mundo: o mapa sob demanda ── */
+.progresso-mapa { display: flex; flex-wrap: wrap; gap: 6px; }
+.progresso-mapa:empty::before { content: "Nada rodando agora."; color: var(--texto5); font-size: var(--fs-apoio); }
+.lista-visitantes { }
+.visitante-corpo { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.visitante-nome { font-size: var(--fs-apoio); font-weight: 600; color: var(--texto2); }
+.visitante-quando { font-size: var(--fs-rotulo); color: var(--texto4); }
+
+/* ── Log: filtro, busca, e as linhas cruas ── */
+.log-barra { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; flex: none; }
+.log-busca {
+  flex: 1; min-width: 160px; background: var(--negro); border: 1px solid var(--linha2);
+  padding: 7px 10px; color: var(--texto); outline: 0;
+}
+.log-busca:focus { border-color: var(--grama-bd); }
+.log-busca::placeholder { color: var(--texto5); }
+.lista-log {
+  flex: 1; min-height: 0; overflow-y: auto; background: var(--negro);
+  border: 1px solid var(--linha3); padding: 8px 10px; font-size: var(--fs-rotulo); line-height: 1.6;
+}
+.log-linha { color: var(--texto3); white-space: pre-wrap; word-break: break-all; padding: 1px 0; }
+.log-linha--erro { color: var(--redstone); }
+.log-linha--entrada_saida { color: var(--grama-cl); }
+.log-linha--comando { color: var(--tocha); }
+
+/* ── Avisos passageiros ──
+   Segue por cima de tudo, no canto — não tem célula de grade porque não
+   é parte do casco, é um aviso passageiro que pode nascer em qualquer
+   canto da tela a qualquer momento. */
+#brindes { position: fixed; right: var(--calha); bottom: var(--calha); z-index: var(--z-brinde);
+           display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+#brindes div { padding: 10px 15px; background: rgba(14,13,12,.95); border: 1px solid var(--linha2);
+               border-left-width: 3px; font-size:var(--fs-apoio); max-width: 340px; }
+#brindes div.bom  { border-left-color: var(--grama); }
+#brindes div.ruim { border-left-color: var(--redstone); }
+#brindes div.aviso{ border-left-color: var(--tocha); }
+
+@media (max-width: 1180px) {
+  /* Sem espaço para a terceira coluna: o casco perde a célula "dir" e
+     tudo que morava nela migra para a coluna do palco. */
+  #casco { grid-template-columns: [esq] 220px [palco] 1fr [fim]; }
+  #coluna-dir { display: none; }
+  #ferramentas-mapa { grid-column: palco / fim; }
+  /* Some a fita de verdade, some o único jeito de ver a resposta de um
+     comando — a mínima cobre o buraco aqui, do mesmo jeito que já cobre
+     no modo de jogo, mesmo fora dele. */
+  #fita-minima:not([hidden]) { display: block; }
+  /* Mesma régua que tira a coluna "dir": sem ela sobra largura de sobra
+     no palco para a prévia caber ao lado da barra por pura conta de
+     flexbox — mas o combinado é embaixo aqui, não ao lado. flex-shrink
+     zero é o que importa: sem poder encolher, os 100% de base não cabem
+     ao lado da barra e a quebra de linha vira garantida, não uma aposta. */
+  #previa-item { flex: 0 0 100%; max-width: 100%; }
+}
+
+/* Único ponto de corte por altura do arquivo inteiro: abaixo dela a
+   barra de ferramentas em pé (5 itens × 34px) não cabe entre o topo e o
+   rodapé e o último ícone sai da faixa do palco. Deitar a barra troca a
+   altura que faltava por largura, que sobra. */
+@media (max-height: 700px) {
+  #ferramentas-mapa { flex-direction: row; }
+  #ferramentas-mapa .risca { width: 1px; height: auto; margin: 5px 2px; }
+}

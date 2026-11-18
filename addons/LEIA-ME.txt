@@ -1,0 +1,12 @@
+Jogue aqui dentro os arquivos:
+
+  .mcpack     - um pack sozinho (behavior OU resource)
+  .mcaddon    - conjunto de packs (o script abre e separa sozinho)
+  .mcworld    - um mundo inteiro (leva os packs dele junto)
+  .mctemplate - template de mundo; vira mundo do servidor igual ao .mcworld
+
+Depois rode, na pasta de cima:
+
+  .\scripts\mc.ps1 addons
+
+Nada aqui e apagado. O script so le e copia.
